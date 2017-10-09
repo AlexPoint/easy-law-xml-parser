@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -14,6 +15,8 @@ namespace kali_xml_parser
     {
         static void Main(string[] args)
         {
+            var stopwatch = Stopwatch.StartNew();
+
             var applicationPath = AppDomain.CurrentDomain.BaseDirectory + "..\\..\\";
             var inputDirectory = applicationPath + "input\\";
             var outputDirectory = applicationPath + "output\\";
@@ -30,13 +33,18 @@ namespace kali_xml_parser
             }
 
             // Browse all xml files and append their content to the root element
+            var rawOutputDirectory = outputDirectory + "raw\\";
+            if (!Directory.Exists(rawOutputDirectory))
+            {
+                Directory.CreateDirectory(rawOutputDirectory);
+            }
             var idToNodes = new Dictionary<string, List<XElement>>();
             foreach (var file in Directory.GetFiles(inputDirectory, "*.xml", SearchOption.AllDirectories))
             {
                 var doc = XDocument.Load(file);
 
                 var collAgreeNumber = doc.Descendants("CONTENEUR").Attributes().FirstOrDefault(att => att.Name == "num");
-                if (collAgreeNumber != null)
+                if (collAgreeNumber != null && !string.IsNullOrEmpty(collAgreeNumber.Value))
                 {
                     //Console.WriteLine("Found file with collective agreement: {0}", file);
                     var id = collAgreeNumber.Value;
@@ -46,7 +54,7 @@ namespace kali_xml_parser
                         // write all documents (one per collective agreement)
                         foreach (var entry in idToNodes)
                         {
-                            var outputFile = outputDirectory + entry.Key + ".xml";
+                            var outputFile = rawOutputDirectory + entry.Key + ".xml";
 
                             var bundleDoc = new XDocument(new XElement("root"));
                             if (File.Exists(outputFile))
@@ -67,23 +75,6 @@ namespace kali_xml_parser
                             }
                             bundleDoc.Save(outputFile);
                             Console.WriteLine("Bundle xml file written at {0}", new Uri(outputFile).AbsolutePath);
-
-
-                            // Cleanup unescaped tags (p, sup, em, font, br)
-                            var tagsToEscapeRegex = new Regex(@"<(/)?(p|sup|em|font|br)([^>]*)>");
-                            var cleanOutputFile = outputDirectory + entry.Key + "-clean.xml";
-                            using (var input = File.OpenText(outputFile))
-                            using (var output = new StreamWriter(cleanOutputFile))
-                            {
-                                string line;
-                                while (null != (line = input.ReadLine()))
-                                {
-                                    // optionally modify line.
-                                    var newLine = tagsToEscapeRegex.Replace(line, "<$1$2$3>");
-                                    output.WriteLine(newLine);
-                                }
-                            }
-                            Console.WriteLine("Cleanup bundle xml file written at {0}", new Uri(cleanOutputFile).AbsolutePath);
                         }
 
                         idToNodes.Clear();
@@ -97,9 +88,34 @@ namespace kali_xml_parser
             }
             //Console.WriteLine("Found {0} collective agreement ids", idToNodes.Count);
 
+            // Cleanup unescaped tags (p, sup, em, font, br)
+            Console.WriteLine("Starts cleaning xml files");
+            var cleanOutputDirectory = outputDirectory + "clean\\";
+            if (!Directory.Exists(cleanOutputDirectory))
+            {
+                Directory.CreateDirectory(cleanOutputDirectory);
+            }
+            foreach (var file in Directory.GetFiles(rawOutputDirectory))
+            {
+                var tagsToEscapeRegex = new Regex(@"<(/)?(p|sup|em|font|br)([^>]*)>");
+                var cleanOutputFile = cleanOutputDirectory + Path.GetFileName(file);
+                using (var input = File.OpenText(file))
+                {
+                    using (var output = new StreamWriter(cleanOutputFile))
+                    {
+                        string line;
+                        while (null != (line = input.ReadLine()))
+                        {
+                            // optionally modify line.
+                            var newLine = tagsToEscapeRegex.Replace(line, "<$1$2$3>");
+                            output.WriteLine(newLine);
+                        }
+                    }
+                }
+            }
             
-
-            Console.WriteLine("END");
+            stopwatch.Stop();
+            Console.WriteLine("END (elapsed: {0})", stopwatch.Elapsed.ToString("g"));
             Console.ReadKey();
         }
     }
