@@ -50,6 +50,13 @@ namespace kali_xml_parser
                     var id = collAgreeNumber.Value;
                     if (!idToNodes.ContainsKey(id))
                     {
+                        idToNodes.Add(id, new List<XElement>());
+                    }
+                    idToNodes[id].Add(doc.Root);
+
+                    //
+                    if (idToNodes.Count > 10)
+                    {
                         // Write previous collective agreement and flush dictionary
                         // write all documents (one per collective agreement)
                         foreach (var entry in idToNodes)
@@ -68,7 +75,7 @@ namespace kali_xml_parser
                             }
 
                             // Save the compiled xml file
-                            
+
                             if (!Directory.Exists(outputDirectory))
                             {
                                 Directory.CreateDirectory(outputDirectory);
@@ -78,13 +85,36 @@ namespace kali_xml_parser
                         }
 
                         idToNodes.Clear();
-
-                        idToNodes.Add(id, new List<XElement>());
                     }
-                    idToNodes[id].Add(doc.Root);
                 }
 
                 // do nothing
+            }
+
+            // Write what's remaining in the dictionary
+            foreach (var entry in idToNodes)
+            {
+                var outputFile = rawOutputDirectory + entry.Key + ".xml";
+
+                var bundleDoc = new XDocument(new XElement("root"));
+                if (File.Exists(outputFile))
+                {
+                    bundleDoc = XDocument.Load(outputFile);
+                }
+
+                foreach (var node in entry.Value)
+                {
+                    bundleDoc.Root.Add(node);
+                }
+
+                // Save the compiled xml file
+
+                if (!Directory.Exists(outputDirectory))
+                {
+                    Directory.CreateDirectory(outputDirectory);
+                }
+                bundleDoc.Save(outputFile);
+                Console.WriteLine("Bundle xml file written at {0}", new Uri(outputFile).AbsolutePath);
             }
             //Console.WriteLine("Found {0} collective agreement ids", idToNodes.Count);
 
