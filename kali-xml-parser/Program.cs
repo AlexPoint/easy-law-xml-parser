@@ -92,10 +92,28 @@ namespace kali_xml_parser
                     bundleDoc.Root.Add(doc.Root);
                 }
 
+                // Do two transformations
+
+                // 1 - escape content of <CONTENU> node
+                var contentNode = bundleDoc.Descendants("CONTENU").FirstOrDefault();
+                if (contentNode != null)
+                {
+                    contentNode.ReplaceNodes(new XCData(contentNode.Value));
+                }
+
+                // 2 - delete <LIEN> tags; when several <LIEN> tags are present for the same article, it makes the conversion to csv more difficult
+                // (and those tags do not contain anything valuable)
+                var linkNodes = bundleDoc.Descendants("LIENS");
+                foreach (var linkNode in linkNodes)
+                {
+                    linkNode.Remove();
+                }
+
                 // Save the compiled xml file
                 bundleDoc.Save(outputFile);
             }
-            Console.WriteLine("Start writing compiled collective agreement xml files");
+
+            /*Console.WriteLine("Start writing compiled collective agreement xml files");
 
             // Cleanup unescaped tags (p, sup, em, font, br)
             Console.WriteLine("Starts cleaning xml files");
@@ -106,7 +124,7 @@ namespace kali_xml_parser
             }
             foreach (var file in Directory.GetFiles(rawOutputDirectory))
             {
-                var tagsToEscapeRegex = new Regex(@"<(/)?(p|sup|em|font|br)([^>]*)>");
+                var tagsToEscapeRegex = new Regex(@"<(/)?(p|sup|em|font|br|div|table|tr|td|tbody|th)([^>]*)>");
                 var cleanOutputFile = cleanOutputDirectory + Path.GetFileName(file);
                 using (var input = File.OpenText(file))
                 {
@@ -116,12 +134,12 @@ namespace kali_xml_parser
                         while (null != (line = input.ReadLine()))
                         {
                             // optionally modify line.
-                            var newLine = tagsToEscapeRegex.Replace(line, "<$1$2$3>");
+                            var newLine = tagsToEscapeRegex.Replace(line, "&lt;$1$2$3&gt;");
                             output.WriteLine(newLine);
                         }
                     }
                 }
-            }
+            }*/
             
             stopwatch.Stop();
             Console.WriteLine("END (elapsed: {0})", stopwatch.Elapsed.ToString("g"));
