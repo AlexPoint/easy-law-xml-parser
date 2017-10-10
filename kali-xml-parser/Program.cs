@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.Mail;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -32,91 +33,69 @@ namespace kali_xml_parser
                 dir.Delete(true);
             }
 
-            // Browse all xml files and append their content to the root element
+            // Create raw output directory (xml files as parsed in the input data, but consolidated by collective agreement)
             var rawOutputDirectory = outputDirectory + "raw\\";
             if (!Directory.Exists(rawOutputDirectory))
             {
                 Directory.CreateDirectory(rawOutputDirectory);
             }
-            var idToNodes = new Dictionary<string, List<XElement>>();
+
+            // Browse all xml files and store for each collective agreement id, the associated input file paths.
+            Console.WriteLine("Start browsing input files");
+            var idToFiles = new Dictionary<string, List<string>>();
             foreach (var file in Directory.GetFiles(inputDirectory, "*.xml", SearchOption.AllDirectories))
             {
                 var doc = XDocument.Load(file);
 
                 var collAgreeNumber = doc.Descendants("CONTENEUR").Attributes().FirstOrDefault(att => att.Name == "num");
-                if (collAgreeNumber != null && !string.IsNullOrEmpty(collAgreeNumber.Value))
+                var id = collAgreeNumber == null ? "null" : collAgreeNumber.Value;
+                if (!idToFiles.ContainsKey(id))
                 {
-                    //Console.WriteLine("Found file with collective agreement: {0}", file);
-                    var id = collAgreeNumber.Value;
-                    if (!idToNodes.ContainsKey(id))
-                    {
-                        idToNodes.Add(id, new List<XElement>());
-                    }
-                    idToNodes[id].Add(doc.Root);
-
-                    //
-                    if (idToNodes.Count > 10)
-                    {
-                        // Write previous collective agreement and flush dictionary
-                        // write all documents (one per collective agreement)
-                        foreach (var entry in idToNodes)
-                        {
-                            var outputFile = rawOutputDirectory + entry.Key + ".xml";
-
-                            var bundleDoc = new XDocument(new XElement("root"));
-                            if (File.Exists(outputFile))
-                            {
-                                bundleDoc = XDocument.Load(outputFile);
-                            }
-
-                            foreach (var node in entry.Value)
-                            {
-                                bundleDoc.Root.Add(node);
-                            }
-
-                            // Save the compiled xml file
-
-                            if (!Directory.Exists(outputDirectory))
-                            {
-                                Directory.CreateDirectory(outputDirectory);
-                            }
-                            bundleDoc.Save(outputFile);
-                            Console.WriteLine("Bundle xml file written at {0}", new Uri(outputFile).AbsolutePath);
-                        }
-
-                        idToNodes.Clear();
-                    }
+                    idToFiles.Add(id, new List<string>());
                 }
-
-                // do nothing
+                idToFiles[id].Add(file);
             }
 
-            // Write what's remaining in the dictionary
-            foreach (var entry in idToNodes)
+            // Write temp file
+            Console.WriteLine("Start writing mapping file");
+            var mappingFilePath = outputDirectory + "mapping.txt";
+            foreach (var idToFile in idToFiles)
+            {
+                using (var writer = File.OpenWrite(mappingFilePath))
+                {
+                    using (var tw = new StreamWriter(writer))
+                    {
+                        tw.WriteLine(idToFile.Key);
+                        tw.WriteLine("--");
+                        foreach (var file in idToFile.Value)
+                        {
+                            tw.WriteLine(file); 
+                        }
+                    }
+                }
+            }
+            Console.WriteLine("End writing mapping file");
+
+            // Compile all collective agreement xml files
+            Console.WriteLine("Start writing compiled collective agreement xml files ({0} files)", idToFiles.Count);
+            foreach (var entry in idToFiles)
             {
                 var outputFile = rawOutputDirectory + entry.Key + ".xml";
 
+                // Create empty XML file with root element only
                 var bundleDoc = new XDocument(new XElement("root"));
-                if (File.Exists(outputFile))
+                
+                // Add content of all XML files under the root element
+                foreach (var file in entry.Value)
                 {
-                    bundleDoc = XDocument.Load(outputFile);
-                }
-
-                foreach (var node in entry.Value)
-                {
-                    bundleDoc.Root.Add(node);
+                    var doc = XDocument.Load(file);
+                    bundleDoc.Root.Add(doc.Root);
                 }
 
                 // Save the compiled xml file
-
-                if (!Directory.Exists(outputDirectory))
-                {
-                    Directory.CreateDirectory(outputDirectory);
-                }
                 bundleDoc.Save(outputFile);
-                Console.WriteLine("Bundle xml file written at {0}", new Uri(outputFile).AbsolutePath);
             }
-            //Console.WriteLine("Found {0} collective agreement ids", idToNodes.Count);
+            Console.WriteLine("Start writing compiled collective agreement xml files");
 
             // Cleanup unescaped tags (p, sup, em, font, br)
             Console.WriteLine("Starts cleaning xml files");
